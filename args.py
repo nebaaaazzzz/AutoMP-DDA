@@ -1,10 +1,12 @@
 import argparse
 import time
+from fast_gtn import FastGTNs
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 def config_parser(parser) : 
+    FastGTNs.add_argparse_args(parser)
     # General Arguments
-    parser.add_argument('-da', '--dataset', type=str, choices=['Cdataset' ,'Kdataset' , 'Bdataset'], default='Kdataset',
+    parser.add_argument('-da', '--dataset', type=str, choices=['Cdataset' ,'Kdataset' , 'Bdataset' , 'Fdataset'], default='Kdataset',
                         help='Set the data set for training.')
     parser.add_argument('-sp', '--saved_path', type=str,
                         help='Path to save training results', default=f'result/{time.ctime()}')
@@ -22,19 +24,12 @@ def config_parser(parser) :
     parser.add_argument('-pa', '--patience', default=300, type=int,
                         help='Early Stopping argument')
     # Model Arguments
-    parser.add_argument('-hf', '--hidden_feats', default=64, type=int,
+    parser.add_argument('-hf', '--hidden_feats', default=128, type=int,
                         help='The dimension of hidden tensor in the model')
     parser.add_argument('-he', '--num_heads', default=5, type=int,
                         help='Number of attention heads the model has')
     parser.add_argument('-dp', '--dropout', default=0.4, type=float,
                         help='The rate of dropout layer')
-
-    # Use in-model GTN to learn node embeddings instead of external metapath2vec
-    parser.add_argument('--use_gtn', action='store_true', default=True,
-                        help='If set, use in-model GTN to learn node embeddings (skip m2v)')
-    parser.add_argument('--gtn_type', type=str, choices=['gtn', 'fast_gtn'], default='gtn',
-                        help='Which GTN implementation to use in-model ("gtn" or "fast_gtn")')
-
 
     args = parser.parse_args()
     args.saved_path = args.saved_path + '_' + str(args.seed)

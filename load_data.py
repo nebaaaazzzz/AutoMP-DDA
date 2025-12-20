@@ -12,7 +12,9 @@ def load(dataset):
     if dataset == 'Kdataset':
         return load_Kdataset()
     if dataset == 'Cdataset':
-        return load_Cdataset()
+        return load_homogeneous('Cdataset')
+    if dataset == 'Fdataset' :
+        return load_homogeneous('Fdataset')
 
 def load_Kdataset():
     """Load the heterogeneous network of Kdataset.
@@ -142,11 +144,15 @@ def remove_graph(g, test_id):
     return g
 
 
-def load_Cdataset():
+def load_homogeneous(type):
     """Load the heterogeneous network of Cdataset.
     """
-
-    data = sio.loadmat('./dataset/Cdataset/Cdataset.mat')
+    if type == 'Fdataset' :
+        data = sio.loadmat('./dataset/Fdataset/Fdataset.mat')
+    elif type == 'Cdataset' :
+        data = sio.loadmat('./dataset/Cdataset/Cdataset.mat')
+        
+        
     drug_disease = data['didr'].T
     disease_disease = data['disease']
     drug_drug = data['drug']

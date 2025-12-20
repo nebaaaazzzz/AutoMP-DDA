@@ -6,9 +6,6 @@ import seaborn
 import os
 from sklearn.metrics import roc_curve, roc_auc_score, \
     precision_recall_curve, average_precision_score
-from torch.optim import SparseAdam
-from torch.utils.data import DataLoader
-from dgl.nn.pytorch import MetaPath2Vec
 import matplotlib.pyplot as plt
 
 
@@ -130,38 +127,6 @@ class EarlyStopping(object):
     def save_checkpoint(self, model):
         """Saves model when validation loss decreases."""
         torch.save(model.state_dict(), self.filename)
-
-
-def m2v(g, metapath):
-
-    # device = torch.device('cuda:0')
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = MetaPath2Vec(g, metapath, window_size=3)
-    model.to(device)
-
-    # Use the source node type
-    start_node_type = g.to_canonical_etype(metapath[0])[0]
-    dataloader = DataLoader(torch.arange(g.num_nodes(start_node_type)), batch_size=128,
-                            shuffle=True, collate_fn=model.sample)
-    optimizer = SparseAdam(model.parameters(), lr=0.025)
-
-    for i in range(1):
-        for (pos_u, pos_v, neg_v) in dataloader:
-            pos_u = pos_u.to(device)
-            pos_v = pos_v.to(device)
-            neg_v = neg_v.to(device)
-            loss = model(pos_u, pos_v, neg_v)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-    # Get the embeddings of all dd nodes
-    drug_nids = torch.LongTensor(model.local_to_global_nid['drug']).to(device)
-    drug_emb = model.node_embed(drug_nids).detach()
-    disease_nids = torch.LongTensor(model.local_to_global_nid['disease']).to(device)
-    disease_emb = model.node_embed(disease_nids).detach()
-
-    return drug_emb, disease_emb
 
 
 def plot_result_auc(args, label, predict, auc):

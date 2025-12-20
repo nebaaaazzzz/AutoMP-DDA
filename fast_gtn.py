@@ -196,7 +196,7 @@ class FastGTNs(nn.Module):
 
     
     def forward(self, A, X, num_nodes=None, eval=False, epoch=None):
-        if num_nodes == None:
+        if num_nodes is None:
             num_nodes = self.num_nodes
         H_, Ws = self.fastGTNs[0](A, X, num_nodes=num_nodes, epoch=epoch)
         for i in range(1, self.num_FastGTN_layers):

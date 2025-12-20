@@ -21,9 +21,15 @@ def train():
     # load DDA data for Kfold splitting
     if args.dataset in ['Kdataset', 'Bdataset']:
         df = pd.read_csv('./dataset/{}/{}_baseline.csv'.format(args.dataset, args.dataset), header=None).values
-    else:
+    elif args.dataset == 'Fdataset' : 
+        m = sio.loadmat('./dataset/Fdataset/Fdataset.mat')
+        df = m['didr'].T
+    elif args.dataset =='Cdataset' :
         m = sio.loadmat('./dataset/Cdataset/Cdataset.mat')
         df = m['didr'].T
+    else:
+        raise NameError()
+    
     data = np.array([[i, j, df[i, j]] for i in range(df.shape[0]) for j in range(df.shape[1])])
     print(np.array(np.where(data[:, -1] == 1)).shape)
     data = data.astype('int64')

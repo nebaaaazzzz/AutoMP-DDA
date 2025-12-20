@@ -1,4 +1,4 @@
-from utils import get_metrics_auc, m2v, \
+from utils import get_metrics_auc, \
      EarlyStopping
 from load_data import load, remove_graph
 import torch as th
@@ -8,10 +8,7 @@ device = "cuda" if th.cuda.is_available() else "cpu"
 def train_model(args , g , feature , metapath , train_pos_idx , train_neg_idx , mask_train, label ) :
      # load model and optimizer
     # if using in-model GTN embeddings, skip external metapath2vec
-    if args.use_gtn:
-        drug_emb, disease_emb = None, None
-    else:
-        drug_emb, disease_emb = m2v(g, metapath)
+    drug_emb, disease_emb = None, None
     
     num_nodes = sum([g.num_nodes(nt) for nt in g.ntypes])
     model = Model(etypes=g.etypes, ntypes=g.ntypes,
@@ -20,8 +17,7 @@ def train_model(args , g , feature , metapath , train_pos_idx , train_neg_idx , 
                     num_heads=args.num_heads,
                     dropout=args.dropout,
                     num_nodes=num_nodes,
-                    use_gtn=args.use_gtn,
-                    gtn_type=args.gtn_type)
+                    )
     model.to(device)
 
     optimizer = th.optim.Adam(model.parameters(),
@@ -41,7 +37,7 @@ def train_model(args , g , feature , metapath , train_pos_idx , train_neg_idx , 
     # model training
     for epoch in range(1, args.epoch + 1):
         model.train()
-        score = model(g, feature, drug_emb, disease_emb)
+        score = model(g, feature)
         pred = th.sigmoid(score)
         loss = criterion(score[mask_train].cpu().flatten(),
                             label[mask_train].cpu().flatten())
@@ -149,10 +145,7 @@ def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_id
     assert len(mask_test[0]) == len(test_neg_idx[0]) + len(test_pos_idx[0])
     label = th.tensor(df).float().to(device)
 
-    if args.use_gtn:
-        drug_emb, disease_emb = None, None
-    else:
-        drug_emb, disease_emb = m2v(g, metapath)
+    drug_emb, disease_emb = None, None
     
     num_nodes = sum([g.num_nodes(nt) for nt in g.ntypes])
     model = Model(etypes=g.etypes, ntypes=g.ntypes,
@@ -161,8 +154,7 @@ def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_id
                     num_heads=args.num_heads,
                     dropout=args.dropout,
                     num_nodes=num_nodes,
-                    use_gtn=args.use_gtn,
-                    gtn_type=args.gtn_type)
+                    )
     model.to(device)
     # Try to load matching checkpoint; fall back to non-strict load or skip if incompatible
     checkpoint = th.load(dir[fold])
@@ -176,7 +168,7 @@ def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_id
         except Exception as e2:
             print('Failed to load checkpoint; continuing without loading. Error:', e2)
     model.eval()
-    pred = th.sigmoid(model(g, feature, drug_emb, disease_emb))
+    pred = th.sigmoid(model(g, feature))
     AUC, AUPR = get_metrics_auc(label[mask_test].cpu().detach().numpy(), pred[mask_test].cpu().detach().numpy())
     pred = pred.cpu().detach().numpy()
     pred_result[test_pos_idx[0], test_pos_idx[1]] = pred[test_pos_idx[0], test_pos_idx[1]]
