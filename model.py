@@ -78,7 +78,7 @@ class Graph_attention(nn.Module):
 
 
 class Model(nn.Module):
-    """The overall MRDDA architecture."""
+    """The overall architecture."""
 
     def __init__(self, etypes, ntypes, in_feats, num_nodes, args):
         # gtn_channels=1, gtn_layers=1
