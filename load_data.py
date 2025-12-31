@@ -101,7 +101,7 @@ def load_Bdataset():
     disease_disease = pd.DataFrame(np.array(np.where(disease_disease == 1)).T, columns=['Disease1', 'Disease2'])
     drug_protein = pd.read_csv('./dataset/Bdataset/associations/drug_protein.csv')
     drug_disease = pd.read_csv('./dataset/Bdataset/associations/Bdataset.csv')
-    # protein_disease = pd.read_csv('./dataset/Bdataset/associations/protein_disease.csv')
+    protein_disease = pd.read_csv('./dataset/Bdataset/associations/protein_disease.csv')
     graph_data = {
         ('drug', 'drug_drug', 'drug'): (th.tensor(drug_drug['Drug1'].values),
                                         th.tensor(drug_drug['Drug2'].values)),
@@ -111,6 +111,10 @@ def load_Bdataset():
                                               th.tensor(drug_protein['Drug'].values)),
         ('protein', 'protein_protein', 'protein'): (th.tensor(protein_protein['Protein1'].values),
                                                     th.tensor(protein_protein['Protein2'].values)),
+        ('protein', 'protein_disease', 'disease'): (th.tensor(protein_disease['Protein'].values),
+                                                    th.tensor(protein_disease['Disease'].values)),
+        ('disease', 'disease_protein', 'protein'): (th.tensor(protein_disease['Disease'].values),
+                                                    th.tensor(protein_disease['Protein'].values)),
         ('disease', 'disease_disease', 'disease'): (th.tensor(disease_disease['Disease1'].values),
                                                     th.tensor(disease_disease['Disease2'].values)),
         ('drug', 'drug_disease', 'disease'): (th.tensor(drug_disease['Drug'].values),
@@ -119,6 +123,13 @@ def load_Bdataset():
                                               th.tensor(drug_disease['Drug'].values)),
     }
     g = dgl.heterograph(graph_data)
+    # debug info for Bdataset to help investigate poor performance
+    print(f"[load_Bdataset] ntypes={g.ntypes}, etypes={g.etypes}")
+    for et in g.etypes:
+        try:
+            print(f"  {et}: {g.num_edges(et)} edges")
+        except Exception:
+            print(f"  {et}: (could not fetch edge count)")
     drug_feature = np.hstack((drug_sim, np.zeros((g.num_nodes('drug'), g.num_nodes('disease')))))
     dis_feature = np.hstack((np.zeros((g.num_nodes('disease'), g.num_nodes('drug'))), disease_sim))
     g.nodes['drug'].data['h'] = th.from_numpy(drug_feature).to(th.float32)

@@ -16,69 +16,59 @@ def get_metrics_auc(real_score, predict_score):
 
 
 def get_metrics(real_score, predict_score):
-    """Calculate the performance metrics.
-    Resource code is acquired from:
-    Yu Z, Huang F, Zhao X et al.
-     Predicting drug-disease associations through layer attention graph convolutional network,
-     Brief Bioinform 2021;22.
+    """Memory-efficient calculation of performance metrics.
 
-    Parameters
-    ----------
-    real_score: true labels
-    predict_score: model predictions
+    Uses sklearn's roc_auc_score and average_precision_score for AUC/AUPR, and
+    precision_recall_curve to find the threshold that maximizes F1, then computes
+    Accuracy and Specificity at that threshold.
 
-    Return
-    ---------
+    Returns
+    -------
     AUC, AUPR, Accuracy, F1-Score, Precision, Recall, Specificity
     """
-    sorted_predict_score = np.array(
-        sorted(list(set(np.array(predict_score).flatten()))))
-    sorted_predict_score_num = len(sorted_predict_score)
-    thresholds = sorted_predict_score[np.int32(
-        sorted_predict_score_num * np.arange(1, 1000) / 1000)]
-    thresholds = np.asmatrix(thresholds)
-    thresholds_num = thresholds.shape[1]
+    # ensure inputs are numpy arrays
+    real = np.array(real_score).flatten()
+    pred = np.array(predict_score).flatten()
 
-    predict_score_matrix = np.tile(predict_score, (thresholds_num, 1))
-    negative_index = np.where(predict_score_matrix < thresholds.T)
-    positive_index = np.where(predict_score_matrix >= thresholds.T)
-    predict_score_matrix[negative_index] = 0
-    predict_score_matrix[positive_index] = 1
-    TP = predict_score_matrix.dot(real_score.T)
-    FP = predict_score_matrix.sum(axis=1) - TP
-    FN = real_score.sum() - TP
-    TN = len(real_score.T) - TP - FP - FN
+    # AUC and AUPR (these operate directly on arrays)
+    try:
+        AUC = roc_auc_score(real, pred)
+    except Exception:
+        AUC = float('nan')
+    try:
+        AUPR = average_precision_score(real, pred)
+    except Exception:
+        AUPR = float('nan')
 
-    fpr = FP / (FP + TN)
-    tpr = TP / (TP + FN)
-    ROC_dot_matrix = np.asmatrix(sorted(np.column_stack((fpr, tpr)).tolist())).T
-    ROC_dot_matrix.T[0] = [0, 0]
-    ROC_dot_matrix = np.c_[ROC_dot_matrix, [1, 1]]
-    x_ROC = ROC_dot_matrix[0].T
-    y_ROC = ROC_dot_matrix[1].T
-    auc = 0.5 * (x_ROC[1:] - x_ROC[:-1]).T * (y_ROC[:-1] + y_ROC[1:])
+    # Use precision-recall curve to compute F1 for thresholds
+    precision, recall, thresholds = precision_recall_curve(real, pred)
+    # precision and recall have length = len(thresholds) + 1
+    if len(thresholds) == 0:
+        # degenerate case: no threshold found (all scores identical)
+        best_thresh = 0.5
+        prec = precision[-1]
+        rec = recall[-1]
+        f1 = 2 * prec * rec / (prec + rec + 1e-12)
+    else:
+        # compute F1 for each threshold (align precision/recall appropriately)
+        f1_list = 2 * (precision[1:] * recall[1:]) / (precision[1:] + recall[1:] + 1e-12)
+        best_idx = int(np.nanargmax(f1_list))
+        f1 = float(f1_list[best_idx])
+        prec = float(precision[best_idx + 1])
+        rec = float(recall[best_idx + 1])
+        best_thresh = float(thresholds[best_idx])
 
-    recall_list = tpr
-    precision_list = TP / (TP + FP)
-    PR_dot_matrix = np.asmatrix(sorted(np.column_stack(
-        (recall_list, precision_list)).tolist())).T
-    PR_dot_matrix.T[0] = [0, 1]
-    PR_dot_matrix = np.c_[PR_dot_matrix, [1, 0]]
-    x_PR = PR_dot_matrix[0].T
-    y_PR = PR_dot_matrix[1].T
-    aupr = 0.5 * (x_PR[1:] - x_PR[:-1]).T * (y_PR[:-1] + y_PR[1:])
+    # compute confusion matrix at best_thresh
+    pred_bin = (pred >= best_thresh).astype(int)
+    tp = int(np.sum((pred_bin == 1) & (real == 1)))
+    fp = int(np.sum((pred_bin == 1) & (real == 0)))
+    tn = int(np.sum((pred_bin == 0) & (real == 0)))
+    fn = int(np.sum((pred_bin == 0) & (real == 1)))
 
-    f1_score_list = 2 * TP / (len(real_score.T) + TP - TN)
-    accuracy_list = (TP + TN) / len(real_score.T)
-    specificity_list = TN / (TN + FP)
+    accuracy = (tp + tn) / (len(real) + 1e-12)
+    specificity = tn / (tn + fp + 1e-12)
 
-    max_index = np.argmax(f1_score_list)
-    f1_score = f1_score_list[max_index]
-    accuracy = accuracy_list[max_index]
-    specificity = specificity_list[max_index]
-    recall = recall_list[max_index]
-    precision = precision_list[max_index]
-    return auc[0, 0], aupr[0, 0], accuracy, f1_score, precision, recall, specificity
+    return AUC, AUPR, accuracy, f1, prec, rec, specificity
 
 
 def set_seed(seed=0):

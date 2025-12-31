@@ -1,11 +1,13 @@
-from utils import get_metrics_auc, \
+from utils import get_metrics_auc, get_metrics, \
      EarlyStopping
 from load_data import load, remove_graph
 import torch as th
 import numpy as np
 from model import Model
+import os
+import glob
 device = "cuda" if th.cuda.is_available() else "cpu"
-def train_model(args , g , feature  , train_pos_idx , train_neg_idx , mask_train, label ) :
+def train_model(args , g , feature  , train_pos_idx , train_neg_idx , mask_train, label, fold ) :
      # load model and optimizer
     num_nodes = sum([g.num_nodes(nt) for nt in g.ntypes])
     model = Model(etypes=g.etypes, ntypes=g.ntypes,
@@ -28,6 +30,12 @@ def train_model(args , g , feature  , train_pos_idx , train_neg_idx , mask_train
     criterion = th.nn.BCEWithLogitsLoss(pos_weight=th.tensor(len(train_neg_idx[0]) / len(train_pos_idx[0])))
     print('Loss pos weight: {:.3f}'.format(len(train_neg_idx[0]) / len(train_pos_idx[0])))
     stopper = EarlyStopping(patience=args.patience, saved_path=args.saved_path)
+    # ensure checkpoint filename includes fold number for clear mapping
+    try:
+        stopper.filename = stopper.filename.replace('.pth', f'_fold{fold}.pth')
+    except Exception:
+        # fallback: append fold
+        stopper.filename = stopper.filename + f'_fold{fold}.pth'
 
     # model training
     for epoch in range(1, args.epoch + 1):
@@ -97,7 +105,7 @@ def train_cv(args , fold ,data ,df, data_pos , data_neg , train_pos_idx , test_p
                                                                                             len(test_neg_idx[0])))
     label = th.tensor(df).float().to(device)
     
-    train_model(args , g , feature  , train_pos_idx , train_neg_idx , mask_train, label )
+    train_model(args , g , feature  , train_pos_idx , train_neg_idx , mask_train, label, fold )
 
 
 def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_idx  ,data_neg ,train_neg_idx ,test_neg_idx ) :
@@ -142,7 +150,19 @@ def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_id
                     )
     model.to(device)
     # Try to load matching checkpoint; fall back to non-strict load or skip if incompatible
-    checkpoint = th.load(dir[fold])
+    # Attempt to load fold-specific checkpoint (filenames include _fold{fold} if created by training)
+    files = glob.glob(os.path.join(args.saved_path, '*.pth'))
+    candidates = [f for f in files if f'_fold{fold}' in os.path.basename(f)]
+    if candidates:
+        checkpoint_file = candidates[0]
+    else:
+        files_sorted = sorted(files)
+        if len(files_sorted) >= fold:
+            checkpoint_file = files_sorted[fold-1]
+            print(f"Warning: couldn't find file tagged with '_fold{fold}'; falling back to {checkpoint_file}")
+        else:
+            raise FileNotFoundError(f"No checkpoint available to load for fold {fold}")
+    checkpoint = th.load(checkpoint_file)
     try:
         model.load_state_dict(checkpoint)
     except RuntimeError as e:
@@ -156,7 +176,15 @@ def test_cv(args ,dir,df,fold,pred_result ,data_pos , train_pos_idx ,test_pos_id
     pred = th.sigmoid(model(g, feature))
     AUC, AUPR = get_metrics_auc(label[mask_test].cpu().detach().numpy(), pred[mask_test].cpu().detach().numpy())
     pred = pred.cpu().detach().numpy()
+    # fill predicted result matrix
     pred_result[test_pos_idx[0], test_pos_idx[1]] = pred[test_pos_idx[0], test_pos_idx[1]]
     pred_result[test_neg_idx[0], test_neg_idx[1]] = pred[test_neg_idx[0], test_neg_idx[1]]   
-    print('Fold {} Test AUC {:.3f}; AUPR: {:.3f}'.format(fold, AUC, AUPR))
-    return label
+    # construct matched test vectors using explicit indices to avoid mismatched shapes
+    test_rows = np.concatenate([np.array(test_pos_idx[0]), np.array(test_neg_idx[0])])
+    test_cols = np.concatenate([np.array(test_pos_idx[1]), np.array(test_neg_idx[1])])
+    label_vals = label[test_rows, test_cols].cpu().detach().numpy().flatten()
+    pred_vals = pred[test_rows, test_cols].flatten()
+    # compute full set of metrics for test mask
+    AUC2, aupr2, acc, f1, pre, rec, spe = get_metrics(label_vals, pred_vals)
+    print('Fold {} Test AUC {:.3f}; AUPR: {:.3f}; Acc: {:.3f}; F1: {:.3f}; Precision {:.3f}; Recall {:.3f}; Specificity {:.3f}'.format(fold, AUC2, aupr2, acc, f1, pre, rec, spe))
+    return label, (AUC2, aupr2, acc, f1, pre, rec, spe)

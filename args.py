@@ -6,7 +6,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 def config_parser(parser) : 
     FastGTNs.add_argparse_args(parser)
     # General Arguments
-    parser.add_argument('-da', '--dataset', type=str, choices=['Cdataset' ,'Kdataset' , 'Bdataset' , 'Fdataset'], default='Kdataset',
+    parser.add_argument('-da', '--dataset', type=str, choices=['Cdataset' ,'Kdataset' , 'Bdataset' , 'Fdataset'], default='Cdataset',
                         help='Set the data set for training.')
     parser.add_argument('-sp', '--saved_path', type=str,
                         help='Path to save training results', default=f'result/{time.ctime()}')

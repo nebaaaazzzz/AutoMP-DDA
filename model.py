@@ -113,6 +113,9 @@ class Model(nn.Module):
         self.layer_attention_dis = SemanticAttention(hidden_feats)
         self.predict = InnerProductDecoder(hidden_feats)
         
+        self.att_drug = nn.Parameter(torch.zeros(3))
+        self.att_disease = nn.Parameter(torch.zeros(3))
+
         # optional in-model GTN to learn node embeddings from graph structure
         self.hidden_feats = hidden_feats
         # Instantiate GTN/FastGTN immediately so state_dict works
@@ -197,10 +200,28 @@ class Model(nn.Module):
         drug_emb_list.append(h['drug'])
         dis_emb_list.append(h['disease'])
         
+        
+        org_h = h 
         h = self.HeteroGCN_layer1(g, h, bn=True, dp=True)
+        h1 = h 
         h = self.HeteroGCN_layer2(g, h, bn=True, dp=True)
-        drug_emb_list.append(h['drug'])
-        dis_emb_list.append(h['disease'])
+        w_d = torch.softmax(self.att_drug, dim=0)
+        w_dis = torch.softmax(self.att_disease, dim=0)
+
+        org_h['drug'] = (
+            w_d[0] * org_h['drug'] +
+            w_d[1] * h1['drug'] +
+            w_d[2] * h['drug']
+        )
+
+        org_h['disease'] = (
+            w_dis[0] * org_h['disease'] +
+            w_dis[1] * h1['disease'] +
+            w_dis[2] * h['disease']
+        )
+        
+        drug_emb_list.append(org_h['drug'])
+        dis_emb_list.append(org_h['disease'])
         
         h['disease'], h['drug'] = self.gat_layer(g, h)
         drug_emb_list.append(h['drug'])
